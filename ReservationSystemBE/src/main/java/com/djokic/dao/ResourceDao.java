@@ -69,12 +69,12 @@ public class ResourceDao {
         return resource;
     }
 
-    public void insertResource(Resource resource, Connection con) throws SQLException {
+    public int insertResource(Resource resource, Connection con) throws SQLException {
         PreparedStatement ps = null;
         ResultSet rs = null;
 
         try{
-            ps = con.prepareStatement("INSERT INTO resources (resource_name, resource_type, time_from, time_to, quantity, created_at) VALUES (?, ?, ?, ?, ?, ?)");
+            ps = con.prepareStatement("INSERT INTO resources (resource_name, resource_type, time_from, time_to, quantity, created_at) VALUES (?, ?, ?, ?, ?, ?)", java.sql.Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, resource.getResourceName());
             ps.setString(2, resource.getResourceType().toString());
             ps.setTime(3, java.sql.Time.valueOf(resource.getTimeFrom()));
@@ -82,6 +82,12 @@ public class ResourceDao {
             ps.setInt(5, resource.getQuantity());
             ps.setTimestamp(6, java.sql.Timestamp.valueOf(resource.getCreatedAt()));
             ps.executeUpdate();
+            rs = ps.getGeneratedKeys();
+            if (rs.next()) {
+                return rs.getInt(1);
+            } else {
+                throw new SQLException("Creating resource failed, no ID obtained.");
+            }
         } finally {
             ResourcesManager.closeResources(rs, ps);
         }

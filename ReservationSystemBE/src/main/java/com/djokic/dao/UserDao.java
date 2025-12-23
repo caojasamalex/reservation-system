@@ -45,18 +45,24 @@ public class UserDao {
         return user;
     }
 
-    public void insertUser(User user, Connection con) throws SQLException {
+    public int insertUser(User user, Connection con) throws SQLException {
         PreparedStatement ps = null;
         ResultSet rs = null;
 
         try{
-            ps = con.prepareStatement("INSERT INTO users (username, password, full_name, role, created_at) VALUES (?, ?, ?, ?, ?)");
+            ps = con.prepareStatement("INSERT INTO users (username, password, full_name, role, created_at) VALUES (?, ?, ?, ?, ?)", java.sql.Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, user.getUsername());
             ps.setString(2, user.getPassword());
             ps.setString(3, user.getFullName());
-            ps.setString(4, user.getRole().toString());
+            ps.setString(4, user.getRole().name());
             ps.setObject(5, user.getCreatedAt());
             ps.executeUpdate();
+            rs = ps.getGeneratedKeys();
+            if (rs.next()) {
+                return rs.getInt(1);
+            } else {
+                throw new SQLException("Creating user failed, no ID obtained.");
+            }
         } finally {
             ResourcesManager.closeResources(rs, ps);
         }
@@ -71,7 +77,7 @@ public class UserDao {
             ps.setString(1, user.getUsername());
             ps.setString(2, user.getPassword());
             ps.setString(3, user.getFullName());
-            ps.setString(4, user.getRole().toString());
+            ps.setString(4, user.getRole().name());
             ps.setInt(5, user.getUserId());
             ps.executeUpdate();
         } finally {
@@ -83,7 +89,7 @@ public class UserDao {
         PreparedStatement ps = null;
 
         try{
-            ReservationRepetitionDao.getInstance().deleteByUser(user, con);
+            ReservationDao.getInstance().deleteReservationsByUser(user, con);
             ps = con.prepareStatement("DELETE FROM users WHERE user_id = ?");
             ps.setInt(1, user.getUserId());
 

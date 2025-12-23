@@ -1,9 +1,13 @@
 package com.djokic.dao;
 
+import com.djokic.data.Reservation;
+import com.djokic.data.ReservationRepetition;
 import com.djokic.data.User;
+import com.djokic.enumeration.RepetitionTypeEnum;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class ReservationRepetitionDao {
@@ -13,6 +17,78 @@ public class ReservationRepetitionDao {
 
     public static ReservationRepetitionDao getInstance() {
         return instance;
+    }
+
+    public ReservationRepetition getReservationRepetitionByReservationId(int id, Connection con) throws SQLException {
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        ReservationRepetition reservationRepetition = null;
+
+        try{
+            ps = con.prepareStatement("SELECT * FROM reservation_repetition WHERE reservation_id = ?");
+            ps.setInt(1, id);
+
+            rs = ps.executeQuery();
+            if(rs.next()){
+
+                int reservationId = rs.getInt("reservation_id");
+
+                Reservation reservation = ReservationDao.getInstance().getReservationById(reservationId, con);
+
+                reservationRepetition = new ReservationRepetition(
+                        reservation,
+                        RepetitionTypeEnum.valueOf(rs.getString("repetition_type")),
+                        rs.getDate("repetition_end_date").toLocalDate()
+                );
+            } else {
+                return null;
+            }
+        } finally {
+            ResourcesManager.closeResources(rs, ps);
+        }
+
+        return reservationRepetition;
+    }
+
+    public int insertReservationRepetition(ReservationRepetition reservationRepetition, Connection con) throws SQLException {
+        PreparedStatement ps = null;
+
+        try{
+            ps = con.prepareStatement("INSERT INTO reservation_repetition (reservation_id, repetition_type, repetition_end_date) VALUES (?, ?, ?)");
+            ps.setInt(1, reservationRepetition.getReservation().getId());
+            ps.setString(2, reservationRepetition.getRepetitionType().name());
+            ps.setDate(3, java.sql.Date.valueOf(reservationRepetition.getRepetitionEndDate()));
+            ps.executeUpdate();
+            return reservationRepetition.getReservation().getId();
+        } finally {
+            ResourcesManager.closeResources(null, ps);
+        }
+    }
+
+    public void updateReservationRepetition(ReservationRepetition reservationRepetition, Connection con) throws SQLException {
+        PreparedStatement ps = null;
+
+        try{
+            ps = con.prepareStatement("UPDATE reservation_repetition SET repetition_type = ?, repetition_end_date = ? WHERE reservation_id = ?");
+            ps.setString(1, reservationRepetition.getRepetitionType().name());
+            ps.setDate(2, java.sql.Date.valueOf(reservationRepetition.getRepetitionEndDate()));
+            ps.setInt(3, reservationRepetition.getReservation().getId());
+            ps.executeUpdate();
+        } finally {
+            ResourcesManager.closeResources(null, ps);
+        }
+    }
+
+    public void deleteReservationRepetitionByReservationId(int id, Connection con) throws SQLException {
+        PreparedStatement ps = null;
+
+        try{
+            ps = con.prepareStatement("DELETE FROM reservation_repetition WHERE reservation_id = ?");
+            ps.setInt(1, id);
+            ps.executeUpdate();
+        } finally {
+            ResourcesManager.closeResources(null, ps);
+        }
     }
 
     public void deleteByUser(User user, Connection con) throws SQLException {
