@@ -1,0 +1,22 @@
+<component name="ArtifactManager">
+  <artifact type="war" name="reservation_system">
+    <output-path>$PROJECT_DIR$/out/artifacts/reservation_system</output-path>
+    <root id="archive" name="reservation_system.war">
+      <element id="directory" name="WEB-INF">
+        <element id="directory" name="classes">
+          <element id="module-output" name="ReservationSystemBE" />
+        </element>
+        <element id="directory" name="lib">
+          <element id="library" level="project" name="Maven: mysql:mysql-connector-java:5.1.6" />
+          <element id="library" level="project" name="Maven: log4j:log4j:1.2.17" />
+          <element id="library" level="project" name="Maven: javax:javaee-web-api:7.0" />
+          <element id="library" level="project" name="Maven: io.github.cdimascio:java-dotenv:5.2.2" />
+          <element id="library" level="project" name="Maven: org.jetbrains.kotlin:kotlin-stdlib:1.4.0" />
+          <element id="library" level="project" name="Maven: org.jetbrains.kotlin:kotlin-stdlib-common:1.4.0" />
+          <element id="library" level="project" name="Maven: org.jetbrains:annotations:13.0" />
+          <element id="library" level="project" name="Maven: org.glassfish.jersey.bundles.repackaged:jersey-guava:2.6" />
+        </element>
+      </element>
+    </root>
+  </artifact>
+</component>

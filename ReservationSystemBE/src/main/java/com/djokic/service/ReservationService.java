@@ -1,7 +1,6 @@
 package com.djokic.service;
 
 import com.djokic.dao.ReservationDao;
-import com.djokic.dao.ResourceDao;
 import com.djokic.dao.ResourcesManager;
 import com.djokic.dao.UserDao;
 import com.djokic.data.Reservation;

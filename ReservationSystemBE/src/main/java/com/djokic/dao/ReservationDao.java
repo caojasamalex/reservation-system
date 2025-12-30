@@ -12,10 +12,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.ArrayList;
-import java.util.stream.Collectors;
 
 public class ReservationDao {
     private static final ReservationDao instance = new ReservationDao();
@@ -203,28 +201,71 @@ public class ReservationDao {
             int excludeReservationId,
             Connection con
     ) throws SQLException {
+        List<Reservation> allPotentialOverlaps = getReservationsByResourceAndDate(resourceId, date, con);
 
+        return (int) allPotentialOverlaps.stream()
+                .filter(r -> r.getId() != excludeReservationId)
+                .filter(r -> start.isBefore(r.getEndTime()) && end.isAfter(r.getStartTime()))
+                .count();
+    }
+
+    public List<Reservation> getReservationsByResourceAndDate(int id, LocalDate date, Connection con) throws SQLException{
+        List<Reservation> reservations = new ArrayList<>();
         String sql = """
-        SELECT COUNT(*)
-        FROM reservations
-        WHERE status = 'ACTIVE'
-          AND resource_id = ?
-          AND reservation_id != ?
-          AND date = ?
-          AND NOT (end_time <= ? OR start_time >= ?)
-        """;
+        SELECT r.*, res.resource_name, res.resource_type, res.time_from, res.time_to, res.quantity as res_qty,
+               rr.repetition_type, rr.repetition_end_date
+        FROM reservations r
+        JOIN resources res ON r.resource_id = res.resource_id
+        LEFT JOIN reservation_repetition rr ON r.reservation_id = rr.reservation_id
+        WHERE r.resource_id = ? AND r.status = 'ACTIVE'
+          AND (
+               r.date = ? 
+               OR (rr.repetition_type IS NOT NULL AND ? <= rr.repetition_end_date AND ? >= r.date)
+          )
+    """;
 
         try (PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, resourceId);
-            ps.setInt(2, excludeReservationId);
+            ps.setInt(1, id);
+            ps.setDate(2, java.sql.Date.valueOf(date));
             ps.setDate(3, java.sql.Date.valueOf(date));
-            ps.setTime(4, java.sql.Time.valueOf(start));
-            ps.setTime(5, java.sql.Time.valueOf(end));
+            ps.setDate(4, java.sql.Date.valueOf(date));
 
             try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getInt(1);
+                while (rs.next()) {
+                    LocalDate originalDate = rs.getDate("date").toLocalDate();
+                    String repType = rs.getString("repetition_type");
+
+                    if (repType != null) {
+                        if (!isTargetDatePartOfRepetition(originalDate, date, repType)) {
+                            continue;
+                        }
+                    }
+
+                    User user = UserDao.getInstance().findUserById(rs.getInt("user_id"), con);
+                    Resource resource = new Resource(
+                            rs.getInt("resource_id"), rs.getString("resource_name"),
+                            ResourceTypeEnum.valueOf(rs.getString("resource_type")),
+                            rs.getTime("time_from").toLocalTime(), rs.getTime("time_to").toLocalTime(),
+                            rs.getInt("res_qty")
+                    );
+
+                    reservations.add(new Reservation(
+                            rs.getInt("reservation_id"), user, resource, date,
+                            rs.getTime("start_time").toLocalTime(), rs.getTime("end_time").toLocalTime(),
+                            ReservationStatusEnum.valueOf(rs.getString("status"))
+                    ));
+                }
             }
         }
+        return reservations;
+    }
+
+    private boolean isTargetDatePartOfRepetition(LocalDate original, LocalDate target, String type) {
+        if ("WEEKLY".equals(type)) {
+            return original.getDayOfWeek() == target.getDayOfWeek();
+        } else if ("MONTHLY".equals(type)) {
+            return original.getDayOfMonth() == target.getDayOfMonth();
+        }
+        return false;
     }
 }

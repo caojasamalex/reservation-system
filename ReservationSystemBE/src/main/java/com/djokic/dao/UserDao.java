@@ -27,15 +27,46 @@ public class UserDao {
             ps.setInt(1, id);
             rs = ps.executeQuery();
             if(rs.next()) {
+                java.sql.Timestamp ts = rs.getTimestamp("created_at");
+                java.time.LocalDateTime createdAt = (ts != null) ? ts.toLocalDateTime() : null;
+
                 user = new User(
                         rs.getInt("user_id"),
                         rs.getString("username"),
                         rs.getString("password"),
                         rs.getString("full_name"),
-                        RoleEnumeration.valueOf(
-                                rs.getString("role")
-                        ),
-                        rs.getTimestamp("created_at").toLocalDateTime()
+                        RoleEnumeration.valueOf(rs.getString("role")),
+                        createdAt
+                );
+            }
+        }finally {
+            ResourcesManager.closeResources(rs, ps);
+        }
+
+        return user;
+    }
+
+
+    public User findByUsername(String username, Connection con) throws SQLException {
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        User user = null;
+
+        try{
+            ps = con.prepareStatement("SELECT * FROM users WHERE username = ?");
+            ps.setString(1, username);
+            rs = ps.executeQuery();
+            if(rs.next()) {
+                java.sql.Timestamp ts = rs.getTimestamp("created_at");
+                java.time.LocalDateTime createdAt = (ts != null) ? ts.toLocalDateTime() : null;
+
+                user = new User(
+                        rs.getInt("user_id"),
+                        rs.getString("username"),
+                        rs.getString("password"),
+                        rs.getString("full_name"),
+                        RoleEnumeration.valueOf(rs.getString("role")),
+                        createdAt
                 );
             }
         }finally {
@@ -55,7 +86,11 @@ public class UserDao {
             ps.setString(2, user.getPassword());
             ps.setString(3, user.getFullName());
             ps.setString(4, user.getRole().name());
-            ps.setObject(5, user.getCreatedAt());
+            if (user.getCreatedAt() != null) {
+                ps.setObject(5, user.getCreatedAt());
+            } else {
+                ps.setObject(5, java.time.LocalDateTime.now());
+            }
             ps.executeUpdate();
             rs = ps.getGeneratedKeys();
             if (rs.next()) {

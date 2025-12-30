@@ -1,7 +1,5 @@
 package com.djokic.util;
 
-import io.github.cdimascio.dotenv.Dotenv;
-
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.Base64;
@@ -10,8 +8,8 @@ public class HmacSHA256 {
     private final String secretKey;
 
     public HmacSHA256() {
-        Dotenv dotenv = Dotenv.load();
-        this.secretKey = dotenv.get("HMAC_SECRET");
+        this.secretKey = System.getProperty("HMAC_SECRET");
+
         if (this.secretKey == null) {
             throw new RuntimeException("HMAC_SECRET not set in .env");
         }
