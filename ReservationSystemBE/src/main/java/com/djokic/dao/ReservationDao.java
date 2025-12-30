@@ -4,13 +4,18 @@ import com.djokic.data.Reservation;
 import com.djokic.data.Resource;
 import com.djokic.data.User;
 import com.djokic.enumeration.ReservationStatusEnum;
+import com.djokic.enumeration.ResourceTypeEnum;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 public class ReservationDao {
     private static final ReservationDao instance = new ReservationDao();
@@ -25,18 +30,30 @@ public class ReservationDao {
         PreparedStatement ps = null;
         ResultSet rs = null;
         Reservation reservation = null;
+
+        String sql = "SELECT r.*, res.resource_name, res.resource_type, res.time_from, res.time_to, res.quantity as res_qty " +
+                        "FROM reservations r " +
+                        "JOIN resources res ON r.resource_id = res.resource_id "
+                + "WHERE r.reservation_id = ? ";
+
         try {
-            ps = con.prepareStatement("SELECT * FROM reservations WHERE reservation_id = ?");
+            ps = con.prepareStatement(sql);
             ps.setInt(1, id);
             rs = ps.executeQuery();
             if (rs.next()) {
-                int userId = rs.getInt("user_id");
-                int resourceId = rs.getInt("resource_id");
+                User user = UserDao.getInstance().findUserById(rs.getInt("user_id"), con);
 
-                User user = UserDao.getInstance().findUserById(userId, con);
-                Resource resource = ResourceDao.getInstance().getResource(resourceId, con);
+                Resource resource = new Resource(
+                        rs.getInt("resource_id"),
+                        rs.getString("resource_name"),
+                        ResourceTypeEnum.valueOf(rs.getString("resource_type")),
+                        rs.getTime("time_from").toLocalTime(),
+                        rs.getTime("time_to").toLocalTime(),
+                        rs.getInt("res_qty")
+                );
 
                 reservation = new Reservation(
+                        rs.getInt("reservation_id"),
                         user,
                         resource,
                         rs.getDate("date").toLocalDate(),
@@ -50,28 +67,42 @@ public class ReservationDao {
         }
         return reservation;
     }
-    
+
     public List<Reservation> getReservationsByUserId(int userId, Connection con) throws SQLException {
         PreparedStatement ps = null;
         ResultSet rs = null;
         List<Reservation> reservations = new ArrayList<>();
+
+        String sql = "SELECT r.*, res.resource_name, res.resource_type, res.time_from, res.time_to, res.quantity as res_qty " +
+                "FROM reservations r " +
+                "JOIN resources res ON r.resource_id = res.resource_id " +
+                "WHERE r.user_id = ?";
+
         try {
-            ps = con.prepareStatement("SELECT * FROM reservations WHERE user_id = ?");
+            ps = con.prepareStatement(sql);
             ps.setInt(1, userId);
             rs = ps.executeQuery();
             User user = UserDao.getInstance().findUserById(userId, con);
 
             while (rs.next()) {
-                Resource resource = ResourceDao.getInstance().getResource(rs.getInt("resource_id"), con);
-                Reservation reservation = new Reservation(
+                Resource resource = new Resource(
+                        rs.getInt("resource_id"),
+                        rs.getString("resource_name"),
+                        ResourceTypeEnum.valueOf(rs.getString("resource_type")),
+                        rs.getTime("time_from").toLocalTime(),
+                        rs.getTime("time_to").toLocalTime(),
+                        rs.getInt("res_qty")
+                );
+
+                reservations.add(new Reservation(
+                        rs.getInt("reservation_id"),
                         user,
                         resource,
                         rs.getDate("date").toLocalDate(),
                         rs.getTime("start_time").toLocalTime(),
                         rs.getTime("end_time").toLocalTime(),
                         ReservationStatusEnum.valueOf(rs.getString("status"))
-                );
-                reservations.add(reservation);
+                ));
             }
         } finally {
             ResourcesManager.closeResources(rs, ps);
@@ -161,6 +192,39 @@ public class ReservationDao {
             ps.executeUpdate();
         } finally {
             ResourcesManager.closeResources(null, ps);
+        }
+    }
+
+    public int countOverlappingReservations(
+            LocalDate date,
+            LocalTime start,
+            LocalTime end,
+            int resourceId,
+            int excludeReservationId,
+            Connection con
+    ) throws SQLException {
+
+        String sql = """
+        SELECT COUNT(*)
+        FROM reservations
+        WHERE status = 'ACTIVE'
+          AND resource_id = ?
+          AND reservation_id != ?
+          AND date = ?
+          AND NOT (end_time <= ? OR start_time >= ?)
+        """;
+
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, resourceId);
+            ps.setInt(2, excludeReservationId);
+            ps.setDate(3, java.sql.Date.valueOf(date));
+            ps.setTime(4, java.sql.Time.valueOf(start));
+            ps.setTime(5, java.sql.Time.valueOf(end));
+
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
         }
     }
 }

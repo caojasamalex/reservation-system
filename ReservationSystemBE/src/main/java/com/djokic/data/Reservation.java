@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 public class Reservation {
-    private int id;
+    private int id = -1;
     private User user;
     private Resource resource;
     private LocalDate date;
@@ -20,8 +20,8 @@ public class Reservation {
         this.createdAt = LocalDateTime.now();
     }
 
-    public Reservation(User user, Resource resource, LocalDate date, LocalTime startTime, LocalTime endTime, ReservationStatusEnum status) {
-        this.id = -1;
+    public Reservation(int id, User user, Resource resource, LocalDate date, LocalTime startTime, LocalTime endTime, ReservationStatusEnum status) {
+        this.id = id;
         this.user = user;
         this.resource = resource;
         this.date = date;
