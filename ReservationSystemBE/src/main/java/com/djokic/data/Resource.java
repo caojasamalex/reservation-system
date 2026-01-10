@@ -37,6 +37,16 @@ public class Resource {
         this.createdAt = LocalDateTime.now();
     }
 
+    public Resource(int id, String resourceName, ResourceTypeEnum resourceType, LocalTime timeFrom, LocalTime timeTo, int quantity, LocalDateTime createdAt) {
+        this.id = id;
+        this.resourceName = resourceName;
+        this.resourceType = resourceType;
+        this.timeFrom = timeFrom;
+        this.timeTo = timeTo;
+        this.quantity = quantity;
+        this.createdAt = createdAt;
+    }
+
     public int getId() {
         return this.id;
     }

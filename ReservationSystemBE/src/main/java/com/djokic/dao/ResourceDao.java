@@ -33,7 +33,8 @@ public class ResourceDao {
                         ResourceTypeEnum.valueOf(rs.getString("resource_type")),
                         rs.getTime("time_from").toLocalTime(),
                         rs.getTime("time_to").toLocalTime(),
-                        rs.getInt("quantity")
+                        rs.getInt("quantity"),
+                        rs.getTimestamp("created_at").toLocalDateTime()
                 );
                 resources.add(resource);
             }

@@ -1,10 +1,13 @@
 package com.djokic.dao;
 
 import com.djokic.data.Reservation;
+import com.djokic.data.ReservationDTO;
 import com.djokic.data.Resource;
 import com.djokic.data.User;
+import com.djokic.enumeration.RepetitionTypeEnum;
 import com.djokic.enumeration.ReservationStatusEnum;
 import com.djokic.enumeration.ResourceTypeEnum;
+import com.djokic.enumeration.RoleEnumeration;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -136,19 +139,18 @@ public class ReservationDao {
         }
     }
 
-    public void updateReservation(int reservationId, Reservation reservation, Connection con) throws SQLException {
+    public void updateReservation(Reservation reservation, Connection con) throws SQLException {
         PreparedStatement ps = null;
         try {
             ps = con.prepareStatement(
-                    "UPDATE reservations SET user_id = ?, resource_id = ?, date = ?, start_time = ?, end_time = ?, status = ? WHERE reservation_id = ?"
+                    "UPDATE reservations SET resource_id = ?, date = ?, start_time = ?, end_time = ?, status = ? WHERE reservation_id = ?"
             );
-            ps.setInt(1, reservation.getUser().getUserId());
-            ps.setInt(2, reservation.getResource().getId());
-            ps.setDate(3, java.sql.Date.valueOf(reservation.getDate()));
-            ps.setTime(4, java.sql.Time.valueOf(reservation.getStartTime()));
-            ps.setTime(5, java.sql.Time.valueOf(reservation.getEndTime()));
-            ps.setString(6, reservation.getStatus().name());
-            ps.setInt(7, reservationId);
+            ps.setInt(1, reservation.getResource().getId());
+            ps.setDate(2, java.sql.Date.valueOf(reservation.getDate()));
+            ps.setTime(3, java.sql.Time.valueOf(reservation.getStartTime()));
+            ps.setTime(4, java.sql.Time.valueOf(reservation.getEndTime()));
+            ps.setString(5, reservation.getStatus().name());
+            ps.setInt(6, reservation.getId());
             ps.executeUpdate();
         } finally {
             ResourcesManager.closeResources(null, ps);
@@ -181,6 +183,33 @@ public class ReservationDao {
         }
     }
 
+    public void deleteReservationsByResource(int resourceId, Connection con) throws SQLException {
+        PreparedStatement ps = null;
+        try{
+            ReservationRepetitionDao.getInstance().deleteByResource(resourceId, con);
+
+            ps =  con.prepareStatement("DELETE FROM reservations WHERE resource_id = ?");
+            ps.setInt(1, resourceId);
+            ps.executeUpdate();
+        } finally {
+            ResourcesManager.closeResources(null, ps);
+        }
+    }
+
+    public void deleteReservationsByResourceAndUser(int resourceId, int userId, Connection con) throws SQLException {
+        PreparedStatement ps = null;
+        try{
+            ReservationRepetitionDao.getInstance().deleteByResourceAndUser(resourceId, userId, con);
+
+            ps =  con.prepareStatement("DELETE FROM reservations WHERE resource_id = ? AND user_id = ?");
+            ps.setInt(1, resourceId);
+            ps.setInt(2, userId);
+            ps.executeUpdate();
+        } finally {
+            ResourcesManager.closeResources(null, ps);
+        }
+    }
+
     public void changeReservationStatus(int reservationId, ReservationStatusEnum status, Connection con) throws SQLException {
         PreparedStatement ps = null;
         try {
@@ -201,9 +230,9 @@ public class ReservationDao {
             int excludeReservationId,
             Connection con
     ) throws SQLException {
-        List<Reservation> allPotentialOverlaps = getReservationsByResourceAndDate(resourceId, date, con);
+        List<Reservation> potentialOverlaps = getReservationsByResourceAndDate(resourceId, date, con);
 
-        return (int) allPotentialOverlaps.stream()
+        return (int) potentialOverlaps.stream()
                 .filter(r -> r.getId() != excludeReservationId)
                 .filter(r -> start.isBefore(r.getEndTime()) && end.isAfter(r.getStartTime()))
                 .count();
@@ -212,17 +241,19 @@ public class ReservationDao {
     public List<Reservation> getReservationsByResourceAndDate(int id, LocalDate date, Connection con) throws SQLException{
         List<Reservation> reservations = new ArrayList<>();
         String sql = """
-        SELECT r.*, res.resource_name, res.resource_type, res.time_from, res.time_to, res.quantity as res_qty,
-               rr.repetition_type, rr.repetition_end_date
-        FROM reservations r
-        JOIN resources res ON r.resource_id = res.resource_id
-        LEFT JOIN reservation_repetition rr ON r.reservation_id = rr.reservation_id
-        WHERE r.resource_id = ? AND r.status = 'ACTIVE'
-          AND (
-               r.date = ? 
-               OR (rr.repetition_type IS NOT NULL AND ? <= rr.repetition_end_date AND ? >= r.date)
-          )
-    """;
+            SELECT r.*, res.resource_name, res.resource_type, res.time_from, res.time_to, res.quantity AS res_qty,
+                   rr.repetition_type, rr.repetition_end_date,
+                   u.*
+            FROM reservations r
+            JOIN resources res ON r.resource_id = res.resource_id
+            LEFT JOIN reservation_repetition rr ON r.reservation_id = rr.reservation_id
+            JOIN users u ON r.user_id = u.user_id
+            WHERE r.resource_id = ? AND r.status = 'ACTIVE'
+              AND (
+                   r.date = ?
+                   OR (rr.repetition_type IS NOT NULL AND ? <= rr.repetition_end_date AND ? >= r.date)
+              )
+        """;
 
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, id);
@@ -235,13 +266,21 @@ public class ReservationDao {
                     LocalDate originalDate = rs.getDate("date").toLocalDate();
                     String repType = rs.getString("repetition_type");
 
-                    if (repType != null) {
-                        if (!isTargetDatePartOfRepetition(originalDate, date, repType)) {
-                            continue;
-                        }
+                    if (repType != null && !isTargetDatePartOfRepetition(originalDate, date, repType)) {
+                        continue;
                     }
 
-                    User user = UserDao.getInstance().findUserById(rs.getInt("user_id"), con);
+                    java.sql.Timestamp ts = rs.getTimestamp("created_at");
+                    java.time.LocalDateTime createdAt = (ts != null) ? ts.toLocalDateTime() : null;
+
+                    User user = new User(
+                            rs.getInt("user_id"),
+                            rs.getString("username"),
+                            rs.getString("password"),
+                            rs.getString("full_name"),
+                            RoleEnumeration.valueOf(rs.getString("role")),
+                            createdAt
+                    );
                     Resource resource = new Resource(
                             rs.getInt("resource_id"), rs.getString("resource_name"),
                             ResourceTypeEnum.valueOf(rs.getString("resource_type")),
@@ -261,11 +300,75 @@ public class ReservationDao {
     }
 
     private boolean isTargetDatePartOfRepetition(LocalDate original, LocalDate target, String type) {
-        if ("WEEKLY".equals(type)) {
-            return original.getDayOfWeek() == target.getDayOfWeek();
-        } else if ("MONTHLY".equals(type)) {
-            return original.getDayOfMonth() == target.getDayOfMonth();
+        RepetitionTypeEnum repetitionType = RepetitionTypeEnum.valueOf(type);
+
+        if (target.isBefore(original)) return false;
+
+        return switch (repetitionType) {
+            case DAILY -> true;
+            case WEEKLY -> original.getDayOfWeek() == target.getDayOfWeek();
+            case MONTHLY -> original.getDayOfMonth() == target.getDayOfMonth();
+            case YEARLY ->
+                    original.getMonth() == target.getMonth()
+                            && original.getDayOfMonth() == target.getDayOfMonth();
+        };
+    }
+
+    public List<ReservationDTO> getReservationDTOsByUserId(int userId, Connection con) throws SQLException {
+        String sql = """
+        SELECT r.*, res.resource_name, res.resource_type, res.time_from, res.time_to, res.quantity AS res_qty,
+               rr.repetition_type, rr.repetition_end_date,
+               u.user_id, u.username, u.full_name, u.role, u.created_at
+        FROM reservations r
+        JOIN resources res ON r.resource_id = res.resource_id
+        LEFT JOIN reservation_repetition rr ON r.reservation_id = rr.reservation_id
+        JOIN users u ON r.user_id = u.user_id
+        WHERE r.user_id = ?
+    """;
+
+        List<ReservationDTO> dtos = new ArrayList<>();
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    User user = new User(
+                            rs.getInt("user_id"),
+                            rs.getString("username"),
+                            null, // password
+                            rs.getString("full_name"),
+                            RoleEnumeration.valueOf(rs.getString("role")),
+                            rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null
+                    );
+
+                    Resource resource = new Resource(
+                            rs.getInt("resource_id"),
+                            rs.getString("resource_name"),
+                            ResourceTypeEnum.valueOf(rs.getString("resource_type")),
+                            rs.getTime("time_from").toLocalTime(),
+                            rs.getTime("time_to").toLocalTime(),
+                            rs.getInt("res_qty")
+                    );
+
+                    Reservation reservation = new Reservation(
+                            rs.getInt("reservation_id"),
+                            user,
+                            resource,
+                            rs.getDate("date").toLocalDate(),
+                            rs.getTime("start_time").toLocalTime(),
+                            rs.getTime("end_time").toLocalTime(),
+                            ReservationStatusEnum.valueOf(rs.getString("status"))
+                    );
+
+                    String repType = rs.getString("repetition_type");
+                    java.sql.Date repEnd = rs.getDate("repetition_end_date");
+                    dtos.add(new ReservationDTO(
+                            reservation,
+                            repType != null ? RepetitionTypeEnum.valueOf(repType) : null,
+                            repEnd != null ? repEnd.toLocalDate() : null
+                    ));
+                }
+            }
         }
-        return false;
+        return dtos;
     }
 }

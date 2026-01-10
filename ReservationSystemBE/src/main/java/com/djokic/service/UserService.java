@@ -2,6 +2,7 @@ package com.djokic.service;
 
 import com.djokic.dao.ResourcesManager;
 import com.djokic.dao.UserDao;
+import com.djokic.data.EditUserRequest;
 import com.djokic.data.User;
 import com.djokic.enumeration.RoleEnumeration;
 import com.djokic.util.HmacSHA256;
@@ -10,6 +11,8 @@ import com.djokic.util.TokenUtil;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+
+import static com.djokic.util.TokenUtil.authorize;
 
 public class UserService {
     private static final UserService instance = new UserService();
@@ -46,7 +49,7 @@ public class UserService {
             con.setAutoCommit(false);
 
             if(UserDao.getInstance().findByUsername(user.getUsername(), con) != null){
-                return null;
+                throw new  Exception("Invalid username!");
             }
 
             int generatedId = UserDao.getInstance().insertUser(user, con);
@@ -63,6 +66,66 @@ public class UserService {
             throw new RuntimeException(ex);
         } finally {
             ResourcesManager.closeConnection(con);
+        }
+    }
+
+    public User editUser(int id, EditUserRequest editUserRequest, String authHeader) throws Exception {
+        if(id <= 0){
+            throw new Exception("Invalid id!");
+        }
+
+        TokenData tokenData = authorize(authHeader);
+
+        if(tokenData.getUserId() != id){
+            throw new Exception("Unauthorized!");
+        }
+
+        Connection con = null;
+
+        try{
+            con = ResourcesManager.getConnection();
+            con.setAutoCommit(false);
+            User user = UserDao.getInstance().findUserById(id, con);
+
+            if(user == null) {
+                throw new Exception("User not found");
+            }
+
+            if(editUserRequest == null){
+                con.commit();
+                return user;
+            }
+
+            if(editUserRequest.getUsername() != null && !editUserRequest.getUsername().isEmpty() && !editUserRequest.getUsername().equals(user.getUsername())){
+                String normalizedUsername = editUserRequest.getUsername().trim();
+
+                User existing = UserDao.getInstance().findByUsername(normalizedUsername, con);
+                if(existing != null && existing.getUserId() != id){
+                    throw new Exception("Username already taken");
+                }
+
+                user.setUsername(normalizedUsername);
+            }
+
+            if(editUserRequest.getPassword() != null && !editUserRequest.getPassword().isEmpty()){
+                String normalizedAndHashedPassword = hmacSHA256.hashPassword(editUserRequest.getPassword().trim());
+
+                user.setPassword(normalizedAndHashedPassword);
+            }
+
+            if(editUserRequest.getFullName() != null && !editUserRequest.getFullName().isEmpty() && !editUserRequest.getFullName().equals(user.getFullName())){
+                String normalizedFullName = editUserRequest.getFullName().trim();
+
+                user.setFullName(normalizedFullName);
+            }
+
+            UserDao.getInstance().updateUser(user, con);
+            con.commit();
+
+            return user;
+        } catch (SQLException ex) {
+            if(con != null) con.rollback();
+            throw new RuntimeException(ex);
         }
     }
 
@@ -92,10 +155,7 @@ public class UserService {
     }
 
     public User getUserById(int id, String authHeader) throws Exception {
-        TokenData auth = getAuthData(authHeader);
-        if(auth == null){
-            return null;
-        }
+        TokenData auth = authorize(authHeader);
 
         boolean isOwner = (auth.getUserId() == id);
         boolean isAdmin = (auth.getRole() == RoleEnumeration.ADMIN);
@@ -109,13 +169,5 @@ public class UserService {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private TokenData getAuthData(String authHeader){
-        if(authHeader == null || !authHeader.startsWith("Bearer ")){ return null; }
-
-        String token = authHeader.substring(7);
-
-        return TokenUtil.parseToken(token);
     }
 }

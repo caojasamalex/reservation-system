@@ -1,14 +1,17 @@
 package com.djokic.dao;
 
-import com.djokic.data.Reservation;
-import com.djokic.data.ReservationRepetition;
-import com.djokic.data.User;
+import com.djokic.data.*;
 import com.djokic.enumeration.RepetitionTypeEnum;
+import com.djokic.enumeration.ReservationStatusEnum;
+import com.djokic.enumeration.ResourceTypeEnum;
+import com.djokic.enumeration.RoleEnumeration;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ReservationRepetitionDao {
     private static final ReservationRepetitionDao instance = new ReservationRepetitionDao();
@@ -100,6 +103,35 @@ public class ReservationRepetitionDao {
                 "WHERE reservation_id IN (SELECT reservation_id FROM reservations WHERE user_id = ?)"
             );
             ps.setInt(1, user.getUserId());
+            ps.executeUpdate();
+        } finally {
+            ResourcesManager.closeResources(null, ps);
+        }
+    }
+
+    public void deleteByResource(int resourceId, Connection con) throws SQLException {
+        PreparedStatement  ps = null;
+
+        try{
+            ps = con.prepareStatement("DELETE FROM reservation_repetition " +
+                    "WHERE reservation_id IN (SELECT reservation_id FROM reservations WHERE resource_id = ?)");
+
+            ps.setInt(1, resourceId);
+            ps.executeUpdate();
+        } finally {
+            ResourcesManager.closeResources(null, ps);
+        }
+    }
+
+    public void deleteByResourceAndUser(int resourceId, int userId, Connection con) throws SQLException {
+        PreparedStatement  ps = null;
+
+        try{
+            ps = con.prepareStatement("DELETE FROM reservation_repetition " +
+                    "WHERE reservation_id IN (SELECT reservation_id FROM reservations WHERE resource_id = ? AND user_id = ?)");
+
+            ps.setInt(1, resourceId);
+            ps.setInt(2, userId);
             ps.executeUpdate();
         } finally {
             ResourcesManager.closeResources(null, ps);
