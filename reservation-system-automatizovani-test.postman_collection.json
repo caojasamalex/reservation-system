@@ -1,0 +1,654 @@
+{
+	"info": {
+		"_postman_id": "19d1739f-0de1-4ab9-b749-126aebaa23e0",
+		"name": "reservation-system-automatizovani-test",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"_exporter_id": "40101619"
+	},
+	"item": [
+		{
+			"name": "Register User",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"// Generiše jedinstveno korisničko ime za svaki test pokretanje",
+							"pm.environment.set(\"test_username\", \"testuser_\" + Date.now());",
+							"pm.environment.set(\"test_fullname\", \"Test User \" + Date.now());",
+							"pm.environment.set(\"test_password\", \"password123\");"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Status code is 201 Created\", function () {",
+							"    pm.response.to.have.status(201);",
+							"});",
+							"pm.test(\"Response contains token\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('token');",
+							"    // Čuva token za dalju upotrebu, ali se ne setuje kao glavni token ovde",
+							"    // jer je Login sledeći korak koji će setovati pravi token za testiranje",
+							"    // pm.environment.set(\"user_token\", jsonData.token);",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"username\": \"{{test_username}}\",\n  \"password\": \"{{test_password}}\",\n  \"fullName\": \"{{test_fullname}}\"\n}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:8080/api/users"
+			},
+			"response": []
+		},
+		{
+			"name": "Login User (and set token)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"pm.test(\"Response contains token\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('token');",
+							"    // Ovde se token čuva u environment varijabli \"authToken\"",
+							"    pm.environment.set(\"authToken\", jsonData.token);",
+							"    ",
+							"    // Parsiranje User ID iz tokena (pretpostavljamo format: ID:USERNAME:ROLE:TIMESTAMP)",
+							"    // Ovo je pojednostavljeno i zavisi od tvog TokenUtil implementacije",
+							"    let decodedToken = atob(jsonData.token); // Base64 dekodiranje",
+							"    let tokenParts = decodedToken.split(':');",
+							"    if (tokenParts.length >= 1) {",
+							"        pm.environment.set(\"current_user_id\", tokenParts[0]);",
+							"        pm.environment.set(\"current_username\", tokenParts[1]);",
+							"        pm.environment.set(\"current_user_role\", tokenParts[2]);",
+							"    } else {",
+							"        console.error(\"Invalid token format for user ID extraction:\", decodedToken);",
+							"    }",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"username\": \"{{test_username}}\",\n  \"password\": \"{{test_password}}\"\n}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:8080/api/auth"
+			},
+			"response": []
+		},
+		{
+			"name": "Get user info",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": "http://localhost:8080/api/users/{{current_user_id}}"
+			},
+			"response": []
+		},
+		{
+			"name": "Edit user",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"fullName\": \"Updated Full Name\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:8080/api/users/{{current_user_id}}"
+			},
+			"response": []
+		},
+		{
+			"name": "Login as Admin (manual setup needed for admin user initially)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"pm.test(\"Response contains token\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('token');",
+							"    pm.environment.set(\"adminToken\", jsonData.token);",
+							"    let decodedToken = atob(jsonData.token);",
+							"    let tokenParts = decodedToken.split(':');",
+							"    if (tokenParts.length >= 1) {",
+							"        pm.environment.set(\"admin_user_id\", tokenParts[0]);",
+							"    } else {",
+							"        console.error(\"Invalid token format for admin ID extraction:\", decodedToken);",
+							"    }",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"username\": \"testkorisnik\",\n  \"password\": \"password123\"\n}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:8080/api/auth",
+				"description": "NOTE: You need to manually register an 'admin' user with 'adminpass' password and set their role to ADMIN in the DB initially for this to work."
+			},
+			"response": []
+		},
+		{
+			"name": "Create resource",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Status code is 201 Created\", function () {",
+							"    pm.response.to.have.status(201);",
+							"});",
+							"pm.test(\"Response contains new resource ID\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.be.a('number');",
+							"    pm.environment.set(\"test_resource_id\", jsonData);",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{adminToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"resourceName\": \"Automated Test Desk\",\n  \"resourceType\": \"DESK\",\n  \"timeFrom\": \"09:00:00\",\n  \"timeTo\": \"17:00:00\",\n  \"quantity\": 10\n}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:8080/api/resources"
+			},
+			"response": []
+		},
+		{
+			"name": "Get all resources",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": "http://localhost:8080/api/resources"
+			},
+			"response": []
+		},
+		{
+			"name": "Get specific resource",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": "http://localhost:8080/api/resources/{{test_resource_id}}"
+			},
+			"response": []
+		},
+		{
+			"name": "Get available slots",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"let today = new Date();\r",
+							"let year = today.getFullYear();\r",
+							"let month = (today.getMonth() + 1).toString().padStart(2, '0'); // Meseci su 0-11\r",
+							"let day = today.getDate().toString().padStart(2, '0');\r",
+							"let formattedDate = `${year}-${month}-${day}`;\r",
+							"pm.environment.set(\"today\", formattedDate);"
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://localhost:8080/api/resources/{{test_resource_id}}/slots?date={{today}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"resources",
+						"{{test_resource_id}}",
+						"slots"
+					],
+					"query": [
+						{
+							"key": "date",
+							"value": "{{today}}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create reservation",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"let tomorrow = new Date();",
+							"tomorrow.setDate(tomorrow.getDate() + 1);",
+							"let tomorrowFormatted = tomorrow.toISOString().split('T')[0];",
+							"pm.environment.set(\"tomorrow_date\", tomorrowFormatted);"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Status code is 201 Created\", function () {",
+							"    pm.response.to.have.status(201);",
+							"});",
+							"pm.test(\"Response contains new reservation ID\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.be.a('number');",
+							"    pm.environment.set(\"test_reservation_id\", jsonData);",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"resourceId\": {{test_resource_id}},\n  \"date\": \"{{tomorrow_date}}\",\n  \"startTime\": \"10:00:00\",\n  \"endTime\": \"11:00:00\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:8080/api/reservations"
+			},
+			"response": []
+		},
+		{
+			"name": "Create repeating reservation (DAILY)",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"let startDate = new Date();",
+							"startDate.setDate(startDate.getDate() + 2); // Start 2 days from now",
+							"let endDate = new Date(startDate);",
+							"endDate.setDate(startDate.getDate() + 5); // Ends 5 days after start",
+							"pm.environment.set(\"repeating_start_date\", startDate.toISOString().split('T')[0]);",
+							"pm.environment.set(\"repeating_end_date\", endDate.toISOString().split('T')[0]);"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Status code is 201 Created\", function () {",
+							"    pm.response.to.have.status(201);",
+							"});",
+							"pm.test(\"Response contains new repeating reservation ID\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.be.a('number');",
+							"    pm.environment.set(\"test_repeating_reservation_id\", jsonData);",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"resourceId\": {{test_resource_id}},\n  \"date\": \"{{repeating_start_date}}\",\n  \"startTime\": \"14:00:00\",\n  \"endTime\": \"15:00:00\",\n  \"repetitionType\": \"DAILY\",\n  \"repetitionEndDate\": \"{{repeating_end_date}}\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:8080/api/reservations"
+			},
+			"response": []
+		},
+		{
+			"name": "Get specific reservation",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": "http://localhost:8080/api/reservations/{{test_reservation_id}}"
+			},
+			"response": []
+		},
+		{
+			"name": "Edit Reservation",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"resourceId\": {{test_resource_id}},\n  \"date\": \"{{tomorrow_date}}\",\n  \"startTime\": \"10:30:00\",\n  \"endTime\": \"11:30:00\",\n  \"status\": \"ACTIVE\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:8080/api/reservations/{{test_reservation_id}}"
+			},
+			"response": []
+		},
+		{
+			"name": "Change reservation status to CANCELED",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/reservations/{{test_reservation_id}}/status?status=CANCELED",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"reservations",
+						"{{test_reservation_id}}",
+						"status"
+					],
+					"query": [
+						{
+							"key": "status",
+							"value": "CANCELED"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get all reservations for current user",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": "http://localhost:8080/api/reservations/my-reservations"
+			},
+			"response": []
+		},
+		{
+			"name": "Get reservations by User ID (as Admin)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{adminToken}}",
+						"type": "text"
+					}
+				],
+				"url": "http://localhost:8080/api/reservations/user/{{current_user_id}}"
+			},
+			"response": []
+		},
+		{
+			"name": "Delete reservation by Resource (as Admin)",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{adminToken}}",
+						"type": "text"
+					}
+				],
+				"url": "http://localhost:8080/api/reservations/resource/{{test_resource_id}}"
+			},
+			"response": []
+		},
+		{
+			"name": "Delete resource (as Admin)",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{adminToken}}",
+						"type": "text"
+					}
+				],
+				"url": "http://localhost:8080/api/resources/{{test_resource_id}}"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global pre-request script (optional, can be empty or used for common setup)",
+					"// Example: pm.environment.set(\"base_url\", \"http://localhost:8080\");",
+					"// Note: Current requests use hardcoded localhost:8080, adjust if you want a base_url variable."
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global test script (optional, can be empty or used for common assertions)"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "test_username",
+			"value": ""
+		},
+		{
+			"key": "test_password",
+			"value": ""
+		},
+		{
+			"key": "authToken",
+			"value": ""
+		},
+		{
+			"key": "current_user_id",
+			"value": ""
+		},
+		{
+			"key": "test_resource_id",
+			"value": ""
+		},
+		{
+			"key": "test_reservation_id",
+			"value": ""
+		},
+		{
+			"key": "tomorrow_date",
+			"value": ""
+		},
+		{
+			"key": "adminToken",
+			"value": ""
+		},
+		{
+			"key": "admin_user_id",
+			"value": ""
+		},
+		{
+			"key": "test_fullname",
+			"value": ""
+		},
+		{
+			"key": "current_username",
+			"value": ""
+		},
+		{
+			"key": "current_user_role",
+			"value": ""
+		},
+		{
+			"key": "repeating_start_date",
+			"value": ""
+		},
+		{
+			"key": "repeating_end_date",
+			"value": ""
+		},
+		{
+			"key": "test_repeating_reservation_id",
+			"value": ""
+		}
+	]
+}
